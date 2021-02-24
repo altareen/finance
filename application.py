@@ -199,7 +199,7 @@ def history():
     """Show history of transactions"""
 
     # Retrieve the user's stock transactions
-    rows = db.execute("SELECT symbol, quantity, price, occurrence FROM transactions WHERE user_id = user_id", {"user_id": session["user_id"]})
+    rows = db.execute("SELECT symbol, quantity, price, occurrence FROM transactions WHERE user_id = :user_id", {"user_id": session["user_id"]}).fetchall()
 
     # User reached route via GET (as by clicking a link or via redirect)
     return render_template("history.html", rows=rows)
@@ -386,7 +386,7 @@ def sell():
 
     # User reached route via GET (as by clicking a link or via redirect)
     else:
-        rows = db.execute("SELECT symbol FROM portfolio WHERE user_id = :user_id", {"user_id": session["user_id"]})
+        rows = db.execute("SELECT symbol FROM portfolio WHERE user_id = :user_id", {"user_id": session["user_id"]}).fetchall()
         return render_template("sell.html", rows=rows)
 
 
