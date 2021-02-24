@@ -75,7 +75,7 @@ def index():
     tally = 0
 
     # Retrieve the user's stock holdings from their portfolio
-    rows = db.execute("SELECT symbol, quantity FROM portfolio WHERE user_id = ?", session["user_id"])
+    rows = db.execute("SELECT symbol, quantity FROM portfolio WHERE user_id = ?", session["user_id"]).fetchall()
 
     # Construct a dictionary to contain the table information
     for item in rows:
@@ -86,7 +86,7 @@ def index():
         item["price"] = usd(item["price"])
 
     # Get the user's cash holdings and add it to the running tally
-    funds = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])
+    funds = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"]).fetchall()
     cash = funds[0]["cash"]
     tally += cash
 
@@ -295,7 +295,7 @@ def register():
             return apology("original and retyped passwords must match", 400)
 
         # Query database for username
-        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username"))
+        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username")).fetchall()
 
         # Ensure username is not already in the database
         if len(rows) > 0:
@@ -306,7 +306,7 @@ def register():
         db.execute("INSERT INTO users (username, hash) VALUES (?, ?)", request.form.get("username"), hash_code)
 
         # Query database for username
-        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username"))
+        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username")).fetchall()
 
         # Remember which user has logged in
         session["user_id"] = rows[0]["id"]
