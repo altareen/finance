@@ -1,4 +1,24 @@
-CREATE TABLE users (id INTEGER, username TEXT NOT NULL, hash TEXT NOT NULL, cash NUMERIC NOT NULL DEFAULT 10000.00, PRIMARY KEY(id));
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR NOT NULL,
+    hash VARCHAR NOT NULL,
+    cash NUMERIC NOT NULL DEFAULT 10000.00
+);
+
 CREATE UNIQUE INDEX username ON users (username);
-CREATE TABLE portfolio (id INTEGER, user_id INTEGER, symbol TEXT NOT NULL, quantity INTEGER NOT NULL, PRIMARY KEY(id), FOREIGN KEY(user_id) REFERENCES users(id));
-CREATE TABLE transactions (id INTEGER, user_id INTEGER, symbol TEXT NOT NULL, quantity INTEGER NOT NULL, price REAL NOT NULL, occurrence TEXT NOT NULL, PRIMARY KEY(id), FOREIGN KEY(user_id) REFERENCES users(id));
+
+CREATE TABLE IF NOT EXISTS portfolio (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    symbol VARCHAR NOT NULL,
+    quantity INTEGER NOT NULL
+);
+
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    symbol VARCHAR NOT NULL,
+    quantity INTEGER NOT NULL, 
+    price REAL NOT NULL,
+    occurrence VARCHAR NOT NULL
+);

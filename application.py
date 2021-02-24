@@ -75,7 +75,11 @@ def index():
     tally = 0
 
     # Retrieve the user's stock holdings from their portfolio
-    rows = db.execute("SELECT symbol, quantity FROM portfolio WHERE user_id = ?", session["user_id"]).fetchall()
+    rows = db.execute("SELECT symbol, quantity FROM portfolio WHERE user_id = :user_id", {"user_id": session["user_id"]}).fetchall()
+
+    # Convert list of tuples to a list of dictionaries
+    for i in range(len(rows)):
+        rows[i] = dict([("symbol", rows[i][0]), ("quantity", rows[i][1])])
 
     # Construct a dictionary to contain the table information
     for item in rows:
@@ -86,8 +90,8 @@ def index():
         item["price"] = usd(item["price"])
 
     # Get the user's cash holdings and add it to the running tally
-    funds = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"]).fetchall()
-    cash = funds[0]["cash"]
+    funds = db.execute("SELECT cash FROM users WHERE id = :id", {"id": session["user_id"]}).fetchall()
+    cash = float(funds[0]["cash"])
     tally += cash
 
     # User reached route via GET (as by clicking a link or via redirect)
@@ -120,15 +124,15 @@ def buy():
             return apology("quantity of shares must be a positive integer", 400)
 
         # Get the user's current cash balance
-        rows = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])
+        rows = db.execute("SELECT cash FROM users WHERE id = :id", {"id": session["user_id"]}).fetchall()
 
         # Ensure that the user can afford to purchase the quantity of shares
         if rows[0]["cash"] < stock["price"] * int(request.form.get("shares")):
             return apology("you cannot afford to purchase the requested quantity of shares")
 
         # Update cash holdings
-        result = rows[0]["cash"] - stock["price"] * int(request.form.get("shares"))
-        db.execute("UPDATE users SET cash = ? WHERE id = ?", result, session["user_id"])
+        result = float(rows[0]["cash"]) - stock["price"] * int(request.form.get("shares"))
+        db.execute("UPDATE users SET cash = :cash WHERE id = :id", {"cash": result, "id": session["user_id"]})
 
         # Retrieve stock symbol, quantity of shares and stock price
         stock_symbol = request.form.get("symbol").upper()
@@ -136,16 +140,19 @@ def buy():
         stock_price = stock['price']
 
         # Check to see if the stock symbol exists in the portfolio table. If so, top it up with the new stock purchase
-        rows = db.execute("SELECT quantity FROM portfolio WHERE user_id = ? AND symbol = ?", session["user_id"], stock_symbol)
+        rows = db.execute("SELECT quantity FROM portfolio WHERE user_id = :user_id AND symbol = :symbol", {"user_id": session["user_id"], "symbol": stock_symbol}).fetchall()
         if len(rows) > 0:
             result = rows[0]["quantity"] + stock_quantity
-            db.execute("UPDATE portfolio SET quantity = ? WHERE user_id = ? AND symbol = ?", result, session["user_id"], stock_symbol)
+            db.execute("UPDATE portfolio SET quantity = :quantity WHERE user_id = :user_id AND symbol = :symbol", {"quantity": result, "user_id": session["user_id"], "symbol": stock_symbol})
         else:
             # Insert the new stock purchase information into the portfolio table
-            db.execute("INSERT INTO portfolio (user_id, symbol, quantity) VALUES (?, ?, ?)", session["user_id"], stock_symbol, stock_quantity)
+            db.execute("INSERT INTO portfolio (user_id, symbol, quantity) VALUES (:user_id, :symbol, :quantity)", {"user_id": session["user_id"], "symbol": stock_symbol, "quantity": stock_quantity})
 
         # Insert the stock purchase information into the history table
-        db.execute("INSERT INTO transactions (user_id, symbol, quantity, price, occurrence) VALUES (?, ?, ?, ?, ?)", session["user_id"], stock_symbol, stock_quantity, stock_price, datetime.datetime.now())
+        db.execute("INSERT INTO transactions (user_id, symbol, quantity, price, occurrence) VALUES (:user_id, :symbol, :quantity, :price, :occurrence)", {"user_id": session["user_id"], "symbol": stock_symbol, "quantity": stock_quantity, "price": stock_price, "occurrence": datetime.datetime.now()})
+
+        # Commit updates and inserts into database
+        db.commit()
 
         # Redirect user to home page
         return redirect("/")
@@ -167,13 +174,16 @@ def deposit():
         quantity = int(request.form.get("quantity"))
 
         # Retrieve the user's current cash holdings from the users table
-        rows = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])
+        rows = db.execute("SELECT cash FROM users WHERE id = :id", {"id": session["user_id"]}).fetchall()
 
-        # Add the deposited cash to the user's current cash holdingd
-        quantity += rows[0]["cash"]
+        # Add the deposited cash to the user's current cash holdings
+        quantity += int(rows[0]["cash"])
 
         # Place the updated cash amount into the users table
-        db.execute("UPDATE users SET cash = ? WHERE id = ?", quantity, session["user_id"])
+        db.execute("UPDATE users SET cash = :cash WHERE id = :id", {"cash": quantity, "id": session["user_id"]})
+
+        # Commit the update to the database
+        db.commit()
 
         # Redirect user to home page
         return redirect("/")
@@ -189,7 +199,7 @@ def history():
     """Show history of transactions"""
 
     # Retrieve the user's stock transactions
-    rows = db.execute("SELECT symbol, quantity, price, occurrence FROM transactions WHERE user_id = ?", session["user_id"])
+    rows = db.execute("SELECT symbol, quantity, price, occurrence FROM transactions WHERE user_id = user_id", {"user_id": session["user_id"]})
 
     # User reached route via GET (as by clicking a link or via redirect)
     return render_template("history.html", rows=rows)
@@ -214,7 +224,7 @@ def login():
             return apology("must provide password", 403)
 
         # Query database for username
-        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username"))
+        rows = db.execute("SELECT * FROM users WHERE username = :username", {"username": request.form.get("username")}).fetchall()
 
         # Ensure username exists and password is correct
         if len(rows) != 1 or not check_password_hash(rows[0]["hash"], request.form.get("password")):
@@ -295,7 +305,7 @@ def register():
             return apology("original and retyped passwords must match", 400)
 
         # Query database for username
-        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username")).fetchall()
+        rows = db.execute("SELECT * FROM users WHERE username = :username", {"username": request.form.get("username")}).fetchall()
 
         # Ensure username is not already in the database
         if len(rows) > 0:
@@ -303,13 +313,16 @@ def register():
 
         # Place username and hashed password into the database
         hash_code = generate_password_hash(request.form.get("password"))
-        db.execute("INSERT INTO users (username, hash) VALUES (?, ?)", request.form.get("username"), hash_code)
+        db.execute("INSERT INTO users (username, hash) VALUES (:username, :hash)", {"username": request.form.get("username"), "hash": hash_code})
 
         # Query database for username
-        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username")).fetchall()
+        rows = db.execute("SELECT * FROM users WHERE username = :username", {"username": request.form.get("username")}).fetchall()
 
         # Remember which user has logged in
         session["user_id"] = rows[0]["id"]
+
+        # Commit the inserted data
+        db.commit()
 
         # Redirect user to home page
         return redirect("/")
@@ -340,7 +353,7 @@ def sell():
             return apology("quantity of shares must be a positive integer", 400)
 
         # Ensure that the user has a sufficient quantity of shares for the sale
-        rows = db.execute("SELECT quantity FROM portfolio WHERE user_id = ? AND symbol = ?", session["user_id"], request.form.get("symbol"))
+        rows = db.execute("SELECT quantity FROM portfolio WHERE user_id = :user_id AND symbol = :symbol", {"user_id": session["user_id"], "symbol": request.form.get("symbol")}).fetchall()
         if rows[0]["quantity"] < int(request.form.get("shares")):
             return apology("insufficient quantity of shares for requested sale transaction", 400)
 
@@ -352,25 +365,28 @@ def sell():
         # Calculate the reduction in the quantity of shares, and update the portfolio table
         reduced = rows[0]["quantity"] - stock_quantity
         if reduced == 0:
-            db.execute("DELETE FROM portfolio WHERE user_id = ? AND symbol = ?", session["user_id"], stock_symbol)
+            db.execute("DELETE FROM portfolio WHERE user_id = :user_id AND symbol = :symbol", {"user_id": session["user_id"], "symbol": stock_symbol})
         else:
-            db.execute("UPDATE portfolio SET quantity = ? WHERE user_id = ? AND symbol = ?", reduced, session["user_id"], stock_symbol)
+            db.execute("UPDATE portfolio SET quantity = :quantity WHERE user_id = :user_id AND symbol = :symbol", {"quantity": reduced, "user_id": session["user_id"], "symbol": stock_symbol})
 
         # Calculate the increase in cash holdings, and update the users table
         funds = stock_quantity * stock_price
-        rows = db.execute("SELECT cash from users WHERE id = ?", session["user_id"])
-        funds += rows[0]["cash"]
-        db.execute("UPDATE users SET cash = ? WHERE id = ?", funds, session["user_id"])
+        rows = db.execute("SELECT cash from users WHERE id = :id", {"id": session["user_id"]}).fetchall()
+        funds += float(rows[0]["cash"])
+        db.execute("UPDATE users SET cash = :cash WHERE id = :id", {"cash": funds, "id": session["user_id"]})
 
         # Update the transactions table
-        db.execute("INSERT INTO transactions (user_id, symbol, quantity, price, occurrence) VALUES (?, ?, ?, ?, ?)", session["user_id"], stock_symbol, -1*stock_quantity, stock_price, datetime.datetime.now())
+        db.execute("INSERT INTO transactions (user_id, symbol, quantity, price, occurrence) VALUES (:user_id, :symbol, :quantity, :price, :occurrence)", {"user_id": session["user_id"], "symbol": stock_symbol, "quantity": -1*stock_quantity, "price": stock_price, "occurrence": datetime.datetime.now()})
+
+        # Commit the updates and inserts to the database
+        db.commit()
 
         # Redirect user to home page
         return redirect("/")
 
     # User reached route via GET (as by clicking a link or via redirect)
     else:
-        rows = db.execute("SELECT symbol FROM portfolio WHERE user_id = ?", session["user_id"])
+        rows = db.execute("SELECT symbol FROM portfolio WHERE user_id = :user_id", {"user_id": session["user_id"]})
         return render_template("sell.html", rows=rows)
 
 
